@@ -1,0 +1,195 @@
+import os
+import argparse
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+
+
+def load_class_names(feature_dir):
+    class_path = os.path.join(feature_dir, "class_names.txt")
+
+    with open(class_path, "r", encoding="utf-8") as f:
+        class_names = [line.strip() for line in f.readlines()]
+
+    return class_names
+
+
+def load_features(feature_dir, split):
+    if split == "all":
+        X_train = np.load(os.path.join(feature_dir, "X_train.npy"))
+        y_train = np.load(os.path.join(feature_dir, "y_train.npy"))
+
+        X_val = np.load(os.path.join(feature_dir, "X_val.npy"))
+        y_val = np.load(os.path.join(feature_dir, "y_val.npy"))
+
+        X_test = np.load(os.path.join(feature_dir, "X_test.npy"))
+        y_test = np.load(os.path.join(feature_dir, "y_test.npy"))
+
+        X = np.vstack([X_train, X_val, X_test])
+        y = np.concatenate([y_train, y_val, y_test])
+
+        split_labels = (
+            ["train"] * len(y_train)
+            + ["val"] * len(y_val)
+            + ["test"] * len(y_test)
+        )
+
+    else:
+        X = np.load(os.path.join(feature_dir, f"X_{split}.npy"))
+        y = np.load(os.path.join(feature_dir, f"y_{split}.npy"))
+        split_labels = [split] * len(y)
+
+    return X, y, split_labels
+
+
+def balanced_subsample(X, y, split_labels, max_per_class, seed):
+    if max_per_class is None:
+        return X, y, split_labels
+
+    rng = np.random.default_rng(seed)
+
+    selected_indices = []
+
+    for class_id in np.unique(y):
+        class_indices = np.where(y == class_id)[0]
+
+        if len(class_indices) > max_per_class:
+            class_indices = rng.choice(
+                class_indices,
+                size=max_per_class,
+                replace=False
+            )
+
+        selected_indices.extend(class_indices.tolist())
+
+    selected_indices = np.array(selected_indices)
+    rng.shuffle(selected_indices)
+
+    X_sub = X[selected_indices]
+    y_sub = y[selected_indices]
+    split_sub = [split_labels[i] for i in selected_indices]
+
+    return X_sub, y_sub, split_sub
+
+
+def make_label_name(class_name):
+    return class_name.replace("_", " ")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--feature_dir", type=str, required=True)
+    parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--split", type=str, default="test", choices=["train", "val", "test", "all"])
+    parser.add_argument("--perplexity", type=float, default=30.0)
+    parser.add_argument("--max_per_class", type=int, default=None)
+    parser.add_argument("--use_pca", action="store_true")
+    parser.add_argument("--pca_dim", type=int, default=50)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--title", type=str, default="t-SNE visualization of DINOv3 features")
+
+    args = parser.parse_args()
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    class_names = load_class_names(args.feature_dir)
+    X, y, split_labels = load_features(args.feature_dir, args.split)
+
+    X, y, split_labels = balanced_subsample(
+        X=X,
+        y=y,
+        split_labels=split_labels,
+        max_per_class=args.max_per_class,
+        seed=args.seed
+    )
+
+    n_samples = X.shape[0]
+
+    if args.perplexity >= n_samples:
+        perplexity = max(5, (n_samples - 1) // 3)
+    else:
+        perplexity = args.perplexity
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    if args.use_pca:
+        pca_dim = min(args.pca_dim, X_scaled.shape[1], X_scaled.shape[0] - 1)
+
+        pca = PCA(
+            n_components=pca_dim,
+            random_state=args.seed
+        )
+
+        X_input = pca.fit_transform(X_scaled)
+        print("PCA input dimension:", pca_dim)
+        print("PCA explained variance ratio sum:", round(pca.explained_variance_ratio_.sum(), 4))
+
+    else:
+        X_input = X_scaled
+
+    tsne = TSNE(
+        n_components=2,
+        perplexity=perplexity,
+        learning_rate="auto",
+        init="pca",
+        random_state=args.seed
+    )
+
+    X_tsne = tsne.fit_transform(X_input)
+
+    df = pd.DataFrame({
+        "TSNE1": X_tsne[:, 0],
+        "TSNE2": X_tsne[:, 1],
+        "Label_ID": y,
+        "Class": [class_names[i] for i in y],
+        "Split": split_labels
+    })
+
+    csv_path = os.path.join(args.output_dir, f"tsne_{args.split}.csv")
+    df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+
+    plt.rcParams["font.family"] = "Times New Roman"
+    plt.rcParams["font.size"] = 12
+
+    plt.figure(figsize=(8, 6))
+
+    for class_id, class_name in enumerate(class_names):
+        sub = df[df["Label_ID"] == class_id]
+
+        plt.scatter(
+            sub["TSNE1"],
+            sub["TSNE2"],
+            s=30,
+            alpha=0.80,
+            label=make_label_name(class_name)
+        )
+
+    plt.xlabel("t-SNE 1")
+    plt.ylabel("t-SNE 2")
+    plt.title(args.title)
+    plt.legend(loc="best", fontsize=9)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    fig_path = os.path.join(args.output_dir, f"tsne_{args.split}.png")
+    plt.savefig(fig_path, dpi=300)
+    plt.close()
+
+    print("Feature directory:", args.feature_dir)
+    print("Split:", args.split)
+    print("Feature shape used:", X.shape)
+    print("Number of classes:", len(class_names))
+    print("Class names:", class_names)
+    print("Perplexity:", perplexity)
+    print("Saved CSV:", csv_path)
+    print("Saved figure:", fig_path)
+
+
+if __name__ == "__main__":
+    main()
