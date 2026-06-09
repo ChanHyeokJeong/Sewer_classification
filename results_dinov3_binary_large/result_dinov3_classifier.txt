@@ -1,0 +1,28 @@
+DINOv3 Classification Result
+Feature directory = features_dinov3_binary_large
+Classes = ['Damaged', 'Non_Damaged']
+X_train shape = (2000, 384)
+X_val shape = (400, 384)
+X_test shape = (400, 384)
+
+Validation Accuracy = 0.9525
+Validation Macro-F1 = 0.9525
+
+Test Accuracy = 0.9650
+Test Macro-F1 = 0.9650
+Test Precision = 0.9652
+Test Recall = 0.9650
+
+Classification Report
+              precision    recall  f1-score   support
+
+     Damaged     0.9559    0.9750    0.9653       200
+ Non_Damaged     0.9745    0.9550    0.9646       200
+
+    accuracy                         0.9650       400
+   macro avg     0.9652    0.9650    0.9650       400
+weighted avg     0.9652    0.9650    0.9650       400
+
+Confusion Matrix
+[[195   5]
+ [  9 191]]

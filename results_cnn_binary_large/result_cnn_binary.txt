@@ -1,0 +1,22 @@
+CNN Classification Result
+Classes = ['Damaged', 'Non_Damaged']
+
+Test Loss = 0.0870
+Test Accuracy = 0.9700
+Test Macro-F1 = 0.9700
+Test Precision = 0.9708
+Test Recall = 0.9700
+
+Classification Report
+              precision    recall  f1-score   support
+
+     Damaged     0.9519    0.9900    0.9706       200
+ Non_Damaged     0.9896    0.9500    0.9694       200
+
+    accuracy                         0.9700       400
+   macro avg     0.9708    0.9700    0.9700       400
+weighted avg     0.9708    0.9700    0.9700       400
+
+Confusion Matrix
+[[198   2]
+ [ 10 190]]

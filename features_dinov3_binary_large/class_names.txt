@@ -1,0 +1,2 @@
+Damaged
+Non_Damaged
